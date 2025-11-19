@@ -3,16 +3,21 @@
 
 #include <Arduino.h>
 #include <Servo.h>
+#include "motor_control_hal.h"
 
 class xDuinoRails_Turnout {
 public:
     enum MotorType {
         MOTOR_SERVO,
-        MOTOR_COIL
+        MOTOR_COIL,
+        MOTOR_COIL_BEMF
     };
 
-    // Unified constructor
+    // Unified constructor for Servo and Coil
     xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pin1, int pin2, int sensorPin1, int sensorPin2, int angleMin = 30, int angleMax = 150);
+
+    // Overloaded constructor for BEMF
+    xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pwm_a, int pwm_b, int bemf_a, int bemf_b);
 
     void begin();
     void update();
@@ -26,6 +31,7 @@ private:
     };
 
     void stopMotor();
+    static void on_bemf_update(int raw_bemf);
 
     // General properties
     int _id;
@@ -33,6 +39,11 @@ private:
     MotorType _motorType;
     State _state;
     int _targetPosition; // 0: unset, 1: pos1, 2: pos2
+
+    // BEMF-specific properties
+    volatile bool _bemfEndDetected;
+    static xDuinoRails_Turnout* _active_bemf_turnout;
+    static bool _bemf_motor_active;
 
     // Motor-specific data
     union {
@@ -47,9 +58,15 @@ private:
             int pin1;
             int pin2;
         } coil;
+        struct {
+            int pwm_a_pin;
+            int pwm_b_pin;
+            int bemf_a_pin;
+            int bemf_b_pin;
+        } bemf;
     } _motor;
 
-    // Sensor pins
+    // Sensor pins (used for non-BEMF motors)
     int _sensorPin1;
     int _sensorPin2;
 
