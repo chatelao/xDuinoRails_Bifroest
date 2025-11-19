@@ -23,9 +23,10 @@ xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, MotorType mot
 }
 
 // Overloaded constructor for BEMF
-xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pwm_a, int pwm_b, int bemf_a, int bemf_b)
+xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pwm_a, int pwm_b, int bemf_a, int bemf_b, int bemf_threshold, int bemf_stall_count)
     : _id(id), _name(name), _motorType(motorType), _sensorPin1(-1), _sensorPin2(-1),
-      _state(STATE_IDLE), _targetPosition(0), _bemfEndDetected(false) {
+      _state(STATE_IDLE), _targetPosition(0), _bemfEndDetected(false),
+      _bemf_threshold(bemf_threshold), _bemf_stall_count(bemf_stall_count) {
     if (_motorType == MOTOR_COIL_BEMF) {
         _motor.bemf.pwm_a_pin = pwm_a;
         _motor.bemf.pwm_b_pin = pwm_b;
@@ -75,13 +76,13 @@ void xDuinoRails_Turnout::on_bemf_update(int raw_bemf) {
     if (_active_bemf_turnout) {
         // Simple stall detection: if BEMF is below a threshold for some time
         static int stall_count = 0;
-        if (raw_bemf < 10) { // This threshold needs tuning
+        if (raw_bemf < _active_bemf_turnout->_bemf_threshold) {
             stall_count++;
         } else {
             stall_count = 0;
         }
 
-        if (stall_count > 5) { // This count needs tuning
+        if (stall_count > _active_bemf_turnout->_bemf_stall_count) {
             _active_bemf_turnout->_bemfEndDetected = true;
             stall_count = 0;
         }

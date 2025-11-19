@@ -17,7 +17,7 @@ public:
     xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pin1, int pin2, int sensorPin1, int sensorPin2, int angleMin = 30, int angleMax = 150);
 
     // Overloaded constructor for BEMF
-    xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pwm_a, int pwm_b, int bemf_a, int bemf_b);
+    xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pwm_a, int pwm_b, int bemf_a, int bemf_b, int bemf_threshold = 10, int bemf_stall_count = 5);
 
     void begin();
     void update();
@@ -42,6 +42,8 @@ private:
 
     // BEMF-specific properties
     volatile bool _bemfEndDetected;
+    int _bemf_threshold;
+    int _bemf_stall_count;
     static xDuinoRails_Turnout* _active_bemf_turnout;
     static bool _bemf_motor_active;
 
