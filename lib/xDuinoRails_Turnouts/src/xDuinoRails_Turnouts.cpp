@@ -1,33 +1,61 @@
 #include "xDuinoRails_Turnouts.h"
 
-// --- Unified Constructor ---
+// Initialize the static pointers and flags
+volatile xDuinoRails_Turnout* xDuinoRails_Turnout::_active_bemf_turnout = nullptr;
+volatile bool xDuinoRails_Turnout::_bemf_motor_active = false;
+
+// --- Constructors ---
+
+// Original constructor for Servo and Coil
 xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pin1, int pin2, int sensorPin1, int sensorPin2, int angleMin, int angleMax)
     : _id(id), _name(name), _motorType(motorType), _sensorPin1(sensorPin1), _sensorPin2(sensorPin2),
-      _state(STATE_IDLE), _targetPosition(0) {
+      _state(STATE_IDLE), _targetPosition(0), _bemfEndDetected(false) {
     if (_motorType == MOTOR_SERVO) {
         new (&_motor.servo) Servo();
-        _motor.servo.pin = pin1; // pin1 is used for servo
+        _motor.servo.pin = pin1;
         _motor.servo.angleMin = angleMin;
         _motor.servo.angleMax = angleMax;
         _motor.servo.currentAngle = angleMin;
-    } else {
+    } else if (_motorType == MOTOR_COIL) {
         _motor.coil.pin1 = pin1;
         _motor.coil.pin2 = pin2;
     }
 }
 
+// Overloaded constructor for BEMF
+xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, const BEMF_Config& bemf_config)
+    : _id(id), _name(name), _motorType(MOTOR_COIL_BEMF), _sensorPin1(-1), _sensorPin2(-1),
+      _state(STATE_IDLE), _targetPosition(0), _bemfEndDetected(false),
+      _bemf_threshold(bemf_config.bemf_threshold), _bemf_stall_count(bemf_config.bemf_stall_count) {
+    _motor.bemf.pwm_a_pin = bemf_config.pwm_a_pin;
+    _motor.bemf.pwm_b_pin = bemf_config.pwm_b_pin;
+    _motor.bemf.bemf_a_pin = bemf_config.bemf_a_pin;
+    _motor.bemf.bemf_b_pin = bemf_config.bemf_b_pin;
+}
+
+xDuinoRails_Turnout::~xDuinoRails_Turnout() {
+    if (_motorType == MOTOR_SERVO) {
+        _motor.servo.servo.~Servo();
+    }
+}
+
+
 void xDuinoRails_Turnout::begin() {
     if (_motorType == MOTOR_SERVO) {
         _motor.servo.servo.attach(_motor.servo.pin);
         _motor.servo.servo.write(_motor.servo.currentAngle);
-    } else {
+        pinMode(_sensorPin1, INPUT_PULLUP);
+        pinMode(_sensorPin2, INPUT_PULLUP);
+    } else if (_motorType == MOTOR_COIL) {
         pinMode(_motor.coil.pin1, OUTPUT);
         pinMode(_motor.coil.pin2, OUTPUT);
         digitalWrite(_motor.coil.pin1, LOW);
         digitalWrite(_motor.coil.pin2, LOW);
+        pinMode(_sensorPin1, INPUT_PULLUP);
+        pinMode(_sensorPin2, INPUT_PULLUP);
+    } else if (_motorType == MOTOR_COIL_BEMF) {
+        hal_motor_init(_motor.bemf.pwm_a_pin, _motor.bemf.pwm_b_pin, _motor.bemf.bemf_a_pin, _motor.bemf.bemf_b_pin, on_bemf_update);
     }
-    pinMode(_sensorPin1, INPUT_PULLUP);
-    pinMode(_sensorPin2, INPUT_PULLUP);
 }
 
 void xDuinoRails_Turnout::setPosition(int position) {
@@ -40,31 +68,73 @@ void xDuinoRails_Turnout::stopMotor() {
     if (_motorType == MOTOR_COIL) {
         digitalWrite(_motor.coil.pin1, LOW);
         digitalWrite(_motor.coil.pin2, LOW);
+    } else if (_motorType == MOTOR_COIL_BEMF) {
+        hal_motor_set_pwm(0, false);
+        _active_bemf_turnout = nullptr;
+        _bemf_motor_active = false;
     }
     _state = STATE_IDLE;
 }
 
+void xDuinoRails_Turnout::on_bemf_update(int raw_bemf) {
+    if (_active_bemf_turnout) {
+        // Simple stall detection: if BEMF is below a threshold for some time
+        static int stall_count = 0;
+        if (raw_bemf < _active_bemf_turnout->_bemf_threshold) {
+            stall_count++;
+        } else {
+            stall_count = 0;
+        }
+
+        if (stall_count > _active_bemf_turnout->_bemf_stall_count) {
+            _active_bemf_turnout->_bemfEndDetected = true;
+            stall_count = 0;
+        }
+    }
+}
+
 void xDuinoRails_Turnout::update() {
-    bool sensor1_active = digitalRead(_sensorPin1) == LOW;
-    bool sensor2_active = digitalRead(_sensorPin2) == LOW;
+    bool sensor1_active = false;
+    bool sensor2_active = false;
+
+    if (_motorType != MOTOR_COIL_BEMF) {
+        sensor1_active = digitalRead(_sensorPin1) == LOW;
+        sensor2_active = digitalRead(_sensorPin2) == LOW;
+    }
 
     switch (_state) {
         case STATE_IDLE:
             if (_targetPosition == 1 && !sensor1_active) {
+                if (_motorType == MOTOR_COIL_BEMF && _bemf_motor_active) return; // Concurrency lock
+
                 _state = STATE_MOVING_TO_POS1;
                 _moveStartTime = millis();
+                if (_motorType == MOTOR_COIL_BEMF) {
+                    _active_bemf_turnout = this;
+                    _bemf_motor_active = true;
+                    _bemfEndDetected = false;
+                    hal_motor_set_pwm(255, true); // Full speed, forward
+                }
                 Serial.print("Bewegung gestartet: ");
                 Serial.println(_name);
             } else if (_targetPosition == 2 && !sensor2_active) {
+                if (_motorType == MOTOR_COIL_BEMF && _bemf_motor_active) return; // Concurrency lock
+
                 _state = STATE_MOVING_TO_POS2;
                 _moveStartTime = millis();
+                if (_motorType == MOTOR_COIL_BEMF) {
+                    _active_bemf_turnout = this;
+                    _bemf_motor_active = true;
+                    _bemfEndDetected = false;
+                    hal_motor_set_pwm(255, false); // Full speed, reverse
+                }
                 Serial.print("Bewegung gestartet: ");
                 Serial.println(_name);
             }
             break;
 
         case STATE_MOVING_TO_POS1:
-            if (sensor1_active) {
+            if ((_motorType != MOTOR_COIL_BEMF && sensor1_active) || (_motorType == MOTOR_COIL_BEMF && _bemfEndDetected)) {
                 stopMotor();
                 Serial.print("Position 1 erreicht: ");
                 Serial.println(_name);
@@ -81,7 +151,7 @@ void xDuinoRails_Turnout::update() {
                         }
                         _lastMoveTime = millis();
                     }
-                } else {
+                } else if (_motorType == MOTOR_COIL) {
                     if (millis() - _lastMoveTime > (COIL_PULSE_ON_MS + COIL_PULSE_OFF_MS)) {
                         digitalWrite(_motor.coil.pin1, HIGH);
                         _lastMoveTime = millis();
@@ -94,7 +164,7 @@ void xDuinoRails_Turnout::update() {
             break;
 
         case STATE_MOVING_TO_POS2:
-            if (sensor2_active) {
+            if ((_motorType != MOTOR_COIL_BEMF && sensor2_active) || (_motorType == MOTOR_COIL_BEMF && _bemfEndDetected)) {
                 stopMotor();
                 Serial.print("Position 2 erreicht: ");
                 Serial.println(_name);
@@ -111,7 +181,7 @@ void xDuinoRails_Turnout::update() {
                         }
                         _lastMoveTime = millis();
                     }
-                } else {
+                } else if (_motorType == MOTOR_COIL) {
                     if (millis() - _lastMoveTime > (COIL_PULSE_ON_MS + COIL_PULSE_OFF_MS)) {
                         digitalWrite(_motor.coil.pin2, HIGH);
                         _lastMoveTime = millis();
@@ -126,7 +196,7 @@ void xDuinoRails_Turnout::update() {
 }
 
 // --- ThreeWayTurnout Implementation ---
-
+// (This part remains unchanged as it uses standard coil turnouts)
 xDuinoRails_ThreeWayTurnout::xDuinoRails_ThreeWayTurnout(
     int id, const char* name,
     int coilPin1_A, int coilPin2_A, int sensorPin1_A, int sensorPin2_A,
@@ -150,22 +220,18 @@ void xDuinoRails_ThreeWayTurnout::begin() {
 void xDuinoRails_ThreeWayTurnout::setPosition(int position) {
     if (position >= 0 && position <= 2) {
         _targetPosition = position;
-
-        // Based on the target position, command the individual turnouts.
-        // A three-way turnout is in its "straight" position when both coils are off.
-        // To go left, one coil is activated. To go right, the other is.
         switch (_targetPosition) {
             case 0: // Straight
-                _turnoutA->setPosition(1); // Assuming 1 is the 'off' or 'straight' state for coil A
-                _turnoutB->setPosition(1); // Assuming 1 is the 'off' or 'straight' state for coil B
+                _turnoutA->setPosition(1);
+                _turnoutB->setPosition(1);
                 break;
             case 1: // Left
-                _turnoutA->setPosition(2); // Activate coil A
-                _turnoutB->setPosition(1); // Deactivate coil B
+                _turnoutA->setPosition(2);
+                _turnoutB->setPosition(1);
                 break;
             case 2: // Right
-                _turnoutA->setPosition(1); // Deactivate coil A
-                _turnoutB->setPosition(2); // Activate coil B
+                _turnoutA->setPosition(1);
+                _turnoutB->setPosition(2);
                 break;
         }
     }
