@@ -44,8 +44,8 @@ private:
     volatile bool _bemfEndDetected;
     int _bemf_threshold;
     int _bemf_stall_count;
-    static xDuinoRails_Turnout* _active_bemf_turnout;
-    static bool _bemf_motor_active;
+    static volatile xDuinoRails_Turnout* _active_bemf_turnout;
+    static volatile bool _bemf_motor_active;
 
     // Motor-specific data
     union {

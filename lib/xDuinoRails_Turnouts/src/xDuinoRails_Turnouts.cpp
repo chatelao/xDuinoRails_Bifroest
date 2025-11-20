@@ -1,8 +1,8 @@
 #include "xDuinoRails_Turnouts.h"
 
 // Initialize the static pointers and flags
-xDuinoRails_Turnout* xDuinoRails_Turnout::_active_bemf_turnout = nullptr;
-bool xDuinoRails_Turnout::_bemf_motor_active = false;
+volatile xDuinoRails_Turnout* xDuinoRails_Turnout::_active_bemf_turnout = nullptr;
+volatile bool xDuinoRails_Turnout::_bemf_motor_active = false;
 
 // --- Constructors ---
 
