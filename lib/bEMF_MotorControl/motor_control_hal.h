@@ -41,8 +41,7 @@ al B.
  * @param callback A pointer to a function that will be called from an interrupt
  *                 context with new BEMF data.
  */
-void hal_motor_init(uint8_t pwm_a_pin, uint8_t pwm_b_pin, uint8_t bemf_a_pin, ui
-nt8_t bemf_b_pin, hal_bemf_update_callback_t callback);
+void hal_motor_init(uint8_t pwm_a_pin, uint8_t pwm_b_pin, uint8_t bemf_a_pin, uint8_t bemf_b_pin, hal_bemf_update_callback_t callback);
 
 /**
  * @brief Sets the motor's PWM duty cycle and direction.

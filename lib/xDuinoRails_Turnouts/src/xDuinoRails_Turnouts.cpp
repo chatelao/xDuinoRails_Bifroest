@@ -23,16 +23,14 @@ xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, MotorType mot
 }
 
 // Overloaded constructor for BEMF
-xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pwm_a, int pwm_b, int bemf_a, int bemf_b, int bemf_threshold, int bemf_stall_count)
-    : _id(id), _name(name), _motorType(motorType), _sensorPin1(-1), _sensorPin2(-1),
+xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, const BEMF_Config& bemf_config)
+    : _id(id), _name(name), _motorType(MOTOR_COIL_BEMF), _sensorPin1(-1), _sensorPin2(-1),
       _state(STATE_IDLE), _targetPosition(0), _bemfEndDetected(false),
-      _bemf_threshold(bemf_threshold), _bemf_stall_count(bemf_stall_count) {
-    if (_motorType == MOTOR_COIL_BEMF) {
-        _motor.bemf.pwm_a_pin = pwm_a;
-        _motor.bemf.pwm_b_pin = pwm_b;
-        _motor.bemf.bemf_a_pin = bemf_a;
-        _motor.bemf.bemf_b_pin = bemf_b;
-    }
+      _bemf_threshold(bemf_config.bemf_threshold), _bemf_stall_count(bemf_config.bemf_stall_count) {
+    _motor.bemf.pwm_a_pin = bemf_config.pwm_a_pin;
+    _motor.bemf.pwm_b_pin = bemf_config.pwm_b_pin;
+    _motor.bemf.bemf_a_pin = bemf_config.bemf_a_pin;
+    _motor.bemf.bemf_b_pin = bemf_config.bemf_b_pin;
 }
 
 

@@ -2,6 +2,7 @@
 #include <xDuinoRails_Turnouts.h>
 
 // Define the two-way turnout with sensors
+// Note: Pin definitions are for the Seeed XIAO RP2040
 xDuinoRails_Turnout turnout1(
     1,
     "Zweiwegweiche",
@@ -14,26 +15,29 @@ xDuinoRails_Turnout turnout1(
 xDuinoRails_ThreeWayTurnout turnout2(
     2,
     "Dreiwegweiche",
-    D5, D6, // Coil pins A
-    D7, D8, // Sensor pins A
-    D9, D10, // Coil pins B
-    D11, D12  // Sensor pins B
+    D5, D6,    // Coil pins A
+    PIN_A3, PIN_A2, // Sensor pins A
+    D9, D10,   // Coil pins B
+    PIN_A1, PIN_A0  // Sensor pins B
 );
 
-// Define the BEMF-controlled turnout
-// Note: This constructor is now overloaded for BEMF
+// Define the BEMF-controlled turnout using the new config struct
+BEMF_Config bemf_config = {
+    .pwm_a_pin = D7,
+    .pwm_b_pin = D8,
+    .bemf_a_pin = PIN_A0, // Must be an ADC pin
+    .bemf_b_pin = PIN_A1  // Must be an ADC pin
+};
 xDuinoRails_Turnout turnout3(
     3,
     "BEMF-Weiche",
-    xDuinoRails_Turnout::MOTOR_COIL_BEMF,
-    D13, D14, // PWM pins
-    A0, A1    // BEMF sense pins
+    bemf_config
 );
 
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("xDuinoRails Turnout Example: Basic-2-3-BEMF");
+    Serial.println("xDuinoRails Turnout Example: RP2040");
 
     turnout1.begin();
     turnout2.begin();

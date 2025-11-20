@@ -5,6 +5,16 @@
 #include <Servo.h>
 #include "motor_control_hal.h"
 
+// Configuration struct for BEMF-controlled turnouts
+struct BEMF_Config {
+    int pwm_a_pin;
+    int pwm_b_pin;
+    int bemf_a_pin;
+    int bemf_b_pin;
+    int bemf_threshold = 10;
+    int bemf_stall_count = 5;
+};
+
 class xDuinoRails_Turnout {
 public:
     enum MotorType {
@@ -13,11 +23,11 @@ public:
         MOTOR_COIL_BEMF
     };
 
-    // Unified constructor for Servo and Coil
+    // Constructor for Servo and Coil
     xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pin1, int pin2, int sensorPin1, int sensorPin2, int angleMin = 30, int angleMax = 150);
 
     // Overloaded constructor for BEMF
-    xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pwm_a, int pwm_b, int bemf_a, int bemf_b, int bemf_threshold = 10, int bemf_stall_count = 5);
+    xDuinoRails_Turnout(int id, const char* name, const BEMF_Config& bemf_config);
 
     void begin();
     void update();
