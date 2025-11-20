@@ -33,6 +33,12 @@ xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, const BEMF_Co
     _motor.bemf.bemf_b_pin = bemf_config.bemf_b_pin;
 }
 
+xDuinoRails_Turnout::~xDuinoRails_Turnout() {
+    if (_motorType == MOTOR_SERVO) {
+        _motor.servo.servo.~Servo();
+    }
+}
+
 
 void xDuinoRails_Turnout::begin() {
     if (_motorType == MOTOR_SERVO) {

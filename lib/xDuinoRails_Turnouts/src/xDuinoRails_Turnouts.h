@@ -28,6 +28,7 @@ public:
 
     // Overloaded constructor for BEMF
     xDuinoRails_Turnout(int id, const char* name, const BEMF_Config& bemf_config);
+    ~xDuinoRails_Turnout();
 
     void begin();
     void update();

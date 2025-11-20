@@ -16,17 +16,17 @@ xDuinoRails_ThreeWayTurnout turnout2(
     2,
     "Dreiwegweiche",
     D5, D6,    // Coil pins A
-    PIN_A3, PIN_A2, // Sensor pins A
+    A3, A2, // Sensor pins A
     D9, D10,   // Coil pins B
-    PIN_A1, PIN_A0  // Sensor pins B
+    A1, A0  // Sensor pins B
 );
 
 // Define the BEMF-controlled turnout using the new config struct
 BEMF_Config bemf_config = {
     .pwm_a_pin = D7,
     .pwm_b_pin = D8,
-    .bemf_a_pin = PIN_A0, // Must be an ADC pin
-    .bemf_b_pin = PIN_A1  // Must be an ADC pin
+    .bemf_a_pin = A0, // Must be an ADC pin
+    .bemf_b_pin = A1  // Must be an ADC pin
 };
 xDuinoRails_Turnout turnout3(
     3,
