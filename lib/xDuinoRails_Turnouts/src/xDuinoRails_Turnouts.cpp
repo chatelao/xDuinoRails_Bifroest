@@ -11,7 +11,7 @@ xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, MotorType mot
     : _id(id), _name(name), _motorType(motorType), _sensorPin1(sensorPin1), _sensorPin2(sensorPin2),
       _state(STATE_IDLE), _targetPosition(0), _bemfEndDetected(false) {
     if (_motorType == MOTOR_SERVO) {
-        new (&_motor.servo) Servo();
+        _motor.servo.servo = new Servo();
         _motor.servo.pin = pin1;
         _motor.servo.angleMin = angleMin;
         _motor.servo.angleMax = angleMax;
@@ -25,7 +25,7 @@ xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, MotorType mot
 // Overloaded constructor for BEMF
 xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, const BEMF_Config& bemf_config)
     : _id(id), _name(name), _motorType(MOTOR_COIL_BEMF), _sensorPin1(-1), _sensorPin2(-1),
-      _state(STATE_IDLE), _targetPosition(0), _bemfEndDetected(false),
+      _state(STATE_IDLE), _targetPosition(0), _bemfEndDetected(false), _current_stall_count(0),
       _bemf_threshold(bemf_config.bemf_threshold), _bemf_stall_count(bemf_config.bemf_stall_count) {
     _motor.bemf.pwm_a_pin = bemf_config.pwm_a_pin;
     _motor.bemf.pwm_b_pin = bemf_config.pwm_b_pin;
@@ -35,15 +35,15 @@ xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, const BEMF_Co
 
 xDuinoRails_Turnout::~xDuinoRails_Turnout() {
     if (_motorType == MOTOR_SERVO) {
-        _motor.servo.servo.~Servo();
+        delete _motor.servo.servo;
     }
 }
 
 
 void xDuinoRails_Turnout::begin() {
     if (_motorType == MOTOR_SERVO) {
-        _motor.servo.servo.attach(_motor.servo.pin);
-        _motor.servo.servo.write(_motor.servo.currentAngle);
+        _motor.servo.servo->attach(_motor.servo.pin);
+        _motor.servo.servo->write(_motor.servo.currentAngle);
         pinMode(_sensorPin1, INPUT_PULLUP);
         pinMode(_sensorPin2, INPUT_PULLUP);
     } else if (_motorType == MOTOR_COIL) {
@@ -79,16 +79,16 @@ void xDuinoRails_Turnout::stopMotor() {
 void xDuinoRails_Turnout::on_bemf_update(int raw_bemf) {
     if (_active_bemf_turnout) {
         // Simple stall detection: if BEMF is below a threshold for some time
-        static int stall_count = 0;
+        // Using member variable instead of static to prevent state bleeding between turnouts
         if (raw_bemf < _active_bemf_turnout->_bemf_threshold) {
-            stall_count++;
+            _active_bemf_turnout->_current_stall_count++;
         } else {
-            stall_count = 0;
+            _active_bemf_turnout->_current_stall_count = 0;
         }
 
-        if (stall_count > _active_bemf_turnout->_bemf_stall_count) {
+        if (_active_bemf_turnout->_current_stall_count > _active_bemf_turnout->_bemf_stall_count) {
             _active_bemf_turnout->_bemfEndDetected = true;
-            stall_count = 0;
+            _active_bemf_turnout->_current_stall_count = 0;
         }
     }
 }
@@ -113,8 +113,11 @@ void xDuinoRails_Turnout::update() {
                     _active_bemf_turnout = this;
                     _bemf_motor_active = true;
                     _bemfEndDetected = false;
-                    hal_motor_set_pwm(255, true); // Full speed, forward
+                    _current_stall_count = 0;
                 }
+                // Ensure immediate first pulse
+                _lastMoveTime = millis() - (COIL_PULSE_ON_MS + COIL_PULSE_OFF_MS) - 1;
+
                 Serial.print("Bewegung gestartet: ");
                 Serial.println(_name);
             } else if (_targetPosition == 2 && !sensor2_active) {
@@ -126,8 +129,11 @@ void xDuinoRails_Turnout::update() {
                     _active_bemf_turnout = this;
                     _bemf_motor_active = true;
                     _bemfEndDetected = false;
-                    hal_motor_set_pwm(255, false); // Full speed, reverse
+                    _current_stall_count = 0;
                 }
+                // Ensure immediate first pulse
+                _lastMoveTime = millis() - (COIL_PULSE_ON_MS + COIL_PULSE_OFF_MS) - 1;
+
                 Serial.print("Bewegung gestartet: ");
                 Serial.println(_name);
             }
@@ -147,7 +153,7 @@ void xDuinoRails_Turnout::update() {
                     if (millis() - _lastMoveTime > SERVO_STEP_DELAY) {
                         if (_motor.servo.currentAngle > _motor.servo.angleMin) {
                             _motor.servo.currentAngle--;
-                            _motor.servo.servo.write(_motor.servo.currentAngle);
+                            _motor.servo.servo->write(_motor.servo.currentAngle);
                         }
                         _lastMoveTime = millis();
                     }
@@ -158,6 +164,14 @@ void xDuinoRails_Turnout::update() {
                     }
                     if (millis() - _lastMoveTime > COIL_PULSE_ON_MS) {
                         digitalWrite(_motor.coil.pin1, LOW);
+                    }
+                } else if (_motorType == MOTOR_COIL_BEMF) {
+                    if (millis() - _lastMoveTime > (COIL_PULSE_ON_MS + COIL_PULSE_OFF_MS)) {
+                        hal_motor_set_pwm(255, true); // Forward
+                        _lastMoveTime = millis();
+                    }
+                    if (millis() - _lastMoveTime > COIL_PULSE_ON_MS) {
+                        hal_motor_set_pwm(0, false); // OFF (BEMF measurement window)
                     }
                 }
             }
@@ -177,7 +191,7 @@ void xDuinoRails_Turnout::update() {
                     if (millis() - _lastMoveTime > SERVO_STEP_DELAY) {
                         if (_motor.servo.currentAngle < _motor.servo.angleMax) {
                             _motor.servo.currentAngle++;
-                            _motor.servo.servo.write(_motor.servo.currentAngle);
+                            _motor.servo.servo->write(_motor.servo.currentAngle);
                         }
                         _lastMoveTime = millis();
                     }
@@ -188,6 +202,14 @@ void xDuinoRails_Turnout::update() {
                     }
                     if (millis() - _lastMoveTime > COIL_PULSE_ON_MS) {
                         digitalWrite(_motor.coil.pin2, LOW);
+                    }
+                } else if (_motorType == MOTOR_COIL_BEMF) {
+                    if (millis() - _lastMoveTime > (COIL_PULSE_ON_MS + COIL_PULSE_OFF_MS)) {
+                        hal_motor_set_pwm(255, false); // Reverse
+                        _lastMoveTime = millis();
+                    }
+                    if (millis() - _lastMoveTime > COIL_PULSE_ON_MS) {
+                        hal_motor_set_pwm(0, false); // OFF (BEMF measurement window)
                     }
                 }
             }

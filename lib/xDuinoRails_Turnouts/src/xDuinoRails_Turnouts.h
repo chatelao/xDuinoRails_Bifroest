@@ -53,6 +53,7 @@ private:
 
     // BEMF-specific properties
     volatile bool _bemfEndDetected;
+    volatile int _current_stall_count;
     int _bemf_threshold;
     int _bemf_stall_count;
     static volatile xDuinoRails_Turnout* _active_bemf_turnout;
@@ -65,7 +66,7 @@ private:
             int angleMin;
             int angleMax;
             int currentAngle;
-            Servo servo;
+            Servo* servo;
         } servo;
         struct {
             int pin1;
