@@ -11,11 +11,11 @@ This project is a control system for model railway turnouts, designed for the Nu
 - [x] **Precise Position Detection**: Uses end-position sensors (end-switches) to stop motors accurately.
 - [x] **Timeout Protection**: A safety timeout prevents motor damage if a turnout gets stuck.
 - [x] **Non-Blocking Operation**: The control logic is implemented as a state machine to allow concurrent movement of multiple turnouts without blocking the main loop.
-- [x] **PlatformIO Configuration**: Includes a `platformio.ini` file for easy compilation and deployment on a Nucleo-G474RE.
+- [x] **PlatformIO Configuration**: Includes a `platformio.ini` file for easy compilation and deployment on a Seeed XIAO RP2040.
 
 ## Hardware
 
-- **Board**: Nucleo-G474RE
+- **Board**: Seeed XIAO RP2040
 - **Motors**:
     - Standard hobby servos
     - Dual-coil linear motors
