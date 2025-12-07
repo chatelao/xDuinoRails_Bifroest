@@ -20,7 +20,7 @@ pio run -t clean
 
 ### Hardware
 
-The primary development target for this project is the `Nucleo-G474RE` board. While the code is written to be as portable as possible, all pull requests should be tested against this target.
+The primary development target for this project is the `Seeed XIAO RP2040` board. While the code is written to be as portable as possible, all pull requests should be tested against this target.
 
 ## Coding Conventions
 

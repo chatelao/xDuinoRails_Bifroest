@@ -8,6 +8,23 @@ This guide provides detailed instructions for using the `xDuinoRails_Turnouts` l
 
 This is the main class for controlling a standard two-way turnout.
 
+#### Configuration Structs
+
+**`BEMF_Config`**
+
+Used for configuring turnouts with BEMF-based position detection.
+
+```cpp
+struct BEMF_Config {
+    int pwm_a_pin;          // PWM output pin for coil A
+    int pwm_b_pin;          // PWM output pin for coil B
+    int bemf_a_pin;         // Analog input pin for measuring BEMF on coil A
+    int bemf_b_pin;         // Analog input pin for measuring BEMF on coil B
+    int bemf_threshold = 10; // (Optional) Threshold for BEMF detection. Default: 10
+    int bemf_stall_count = 5; // (Optional) Number of consecutive detections required to confirm stall. Default: 5
+};
+```
+
 #### Constructors
 
 **For Servo or Coil Motors with End-Switches:**
@@ -26,12 +43,12 @@ xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pin1, int
 **For Coil Motors with BEMF Detection:**
 
 ```cpp
-xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pwm_a, int pwm_b, int bemf_a, int bemf_b);
+xDuinoRails_Turnout(int id, const char* name, const BEMF_Config& bemf_config);
 ```
 
-*   `motorType`: Must be `MOTOR_COIL_BEMF`.
-*   `pwm_a`, `pwm_b`: The PWM output pins for the motor driver.
-*   `bemf_a`, `bemf_b`: The analog input pins for BEMF sensing.
+*   `id`: A unique integer to identify the turnout.
+*   `name`: A descriptive name for the turnout.
+*   `bemf_config`: A `BEMF_Config` struct containing pin assignments and detection parameters.
 
 #### Methods
 
