@@ -13,6 +13,16 @@ This project is a control system for model railway turnouts, designed for the Nu
 - [x] **Non-Blocking Operation**: The control logic is implemented as a state machine to allow concurrent movement of multiple turnouts without blocking the main loop.
 - [x] **PlatformIO Configuration**: Includes a `platformio.ini` file for easy compilation and deployment on a Seeed XIAO RP2040.
 
+## Roadmap
+
+The following features are planned to bring `xDuinoRails` closer to commercial offerings like ESU SwitchPilot and Viessmann decoders:
+
+- [ ] **DCC/MM Signal Decoding**: Integrate a library (e.g., NmraDcc) to allow direct control via track signal.
+- [ ] **Runtime Configuration**: Implement CV-like configuration storage in EEPROM/Flash to allow changing settings without recompiling.
+- [ ] **I/O Expansion**: Support for I2C/SPI port expanders (e.g., MCP23017) or shift registers to control more turnouts than available GPIO pins allow.
+- [ ] **Signal & Light Control**: Add dedicated classes for controlling railway signals and lighting effects (fading, blinking) linked to turnout states.
+- [ ] **RailCom Support**: Implement RailCom feedback to report turnout status back to the command station.
+
 ## Hardware
 
 - **Board**: Seeed XIAO RP2040
@@ -35,4 +45,5 @@ This project is a control system for model railway turnouts, designed for the Nu
 ## Documentation
 
 - **[User Guide](USER_GUIDE.md)**: A comprehensive guide for users and decoder builders, including API reference and wiring diagrams.
+- **[Feature Comparison](COMPARISON.md)**: A detailed comparison with commercial turnout decoders.
 - **[Contributing Guide](CONTRIBUTING.md)**: Guidelines for developers who want to contribute to the project.
