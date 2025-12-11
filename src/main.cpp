@@ -1,8 +1,16 @@
 #include <Arduino.h>
 #include <xDuinoRails_Turnouts.h>
+#include <NmraDcc.h>
+
+// DCC Pin Definition
+#define DCC_PIN D0
+
+// Initialize the DCC object
+NmraDcc Dcc;
 
 // Define the two-way turnout with sensors
 // Note: Pin definitions are for the Seeed XIAO RP2040
+// Using D1, D2 for Coils, D3, D4 for Sensors
 xDuinoRails_Turnout turnout1(
     1,
     "Zweiwegweiche",
@@ -11,6 +19,8 @@ xDuinoRails_Turnout turnout1(
     D3, D4  // Sensor pins
 );
 
+/*
+// Commented out to avoid pin conflicts during DCC testing
 // Define the Märklin three-way turnout
 xDuinoRails_ThreeWayTurnout turnout2(
     2,
@@ -33,57 +43,63 @@ xDuinoRails_Turnout turnout3(
     "BEMF-Weiche",
     bemf_config
 );
+*/
 
+// Callback for DCC Accessory Packet
+void notifyDccAccTurnoutOutput(uint16_t Addr, uint8_t Direction, uint8_t OutputPower) {
+    Serial.print("DCC Command - Addr: ");
+    Serial.print(Addr);
+    Serial.print(", Dir: ");
+    Serial.print(Direction);
+    Serial.print(", Power: ");
+    Serial.println(OutputPower);
+
+    // Only act on "Output On" commands (OutputPower = 1) if using momentary switches,
+    // but for turnouts, usually the command comes with OutputPower=1.
+    if (OutputPower == 1) {
+        if (Addr == 1) {
+            Serial.print("Switching Turnout 1 to ");
+            Serial.println(Direction ? "Straight (0)" : "Turn (1)");
+            // Note: NMRA direction 0/1 mapping to setPosition 0/1 depends on wiring
+            // Usually 1=Thrown (Turn), 0=Closed (Straight)
+            // But let's assume Direction 1 corresponds to Position 1, Direction 0 to Position 0.
+            // Check library spec: Direction 1 is "Activate", 0 is "Deactivate"?
+            // Actually, for Basic Accessory Decoder Packet:
+            // The least significant bit of the address + the CD bit determines the output.
+            // NmraDcc library abstracts this.
+            // Direction: 1 = "On/Closed/Green", 0 = "Off/Thrown/Red" (standard varies).
+
+            // Let's just map Direction 0 -> Position 0, Direction 1 -> Position 1.
+            turnout1.setPosition(Direction ? 1 : 0);
+        }
+    }
+}
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("xDuinoRails Turnout Example: RP2040");
+    Serial.println("xDuinoRails Turnout Example: RP2040 with DCC");
+
+    // Configure DCC
+    // Setup the DCC Pin with pullup enabled
+    Dcc.pin(0, DCC_PIN, 1);
+
+    // Initialize DCC with Manufacturer ID, Version, Flags, and OpsMode Address
+    Dcc.init(MAN_ID_DIY, 10, CV29_ACCESSORY_DECODER | CV29_OUTPUT_ADDRESS_MODE, 0);
+
+    Serial.print("DCC Initialized on Pin ");
+    Serial.println(DCC_PIN);
 
     turnout1.begin();
-    turnout2.begin();
-    turnout3.begin();
-
-    // Initially set the three-way turnout to straight
-    turnout2.setPosition(0);
+    //turnout2.begin();
+    //turnout3.begin();
 }
 
 void loop() {
+    // Process DCC commands
+    Dcc.process();
+
     // Update the state of all turnouts
     turnout1.update();
-    turnout2.update();
-    turnout3.update();
-
-    // Example logic to cycle through turnout positions
-    static unsigned long lastToggleTime = 0;
-    static int state = 0;
-    if (millis() - lastToggleTime > 5000) { // Every 5 seconds
-        lastToggleTime = millis();
-
-        switch (state) {
-            case 0:
-                Serial.println("Setting Zweiwegweiche to Position 1");
-                turnout1.setPosition(1);
-                Serial.println("Setting Dreiwegweiche to Straight (0)");
-                turnout2.setPosition(0);
-                Serial.println("Setting BEMF-Weiche to Position 1");
-                turnout3.setPosition(1);
-                break;
-            case 1:
-                Serial.println("Setting Zweiwegweiche to Position 2");
-                turnout1.setPosition(2);
-                break;
-            case 2:
-                 Serial.println("Setting Dreiwegweiche to Left (1)");
-                turnout2.setPosition(1);
-                Serial.println("Setting BEMF-Weiche to Position 2");
-                turnout3.setPosition(2);
-                break;
-            case 3:
-                Serial.println("Setting Dreiwegweiche to Right (2)");
-                turnout2.setPosition(2);
-                break;
-        }
-
-        state = (state + 1) % 4;
-    }
+    //turnout2.update();
+    //turnout3.update();
 }

@@ -17,7 +17,7 @@ This project is a control system for model railway turnouts, designed for the Nu
 
 The following features are planned to bring `xDuinoRails` closer to commercial offerings like ESU SwitchPilot and Viessmann decoders:
 
-- [ ] **DCC/MM Signal Decoding**: Integrate a library (e.g., NmraDcc) to allow direct control via track signal.
+- [x] **DCC/MM Signal Decoding**: Integrate a library (e.g., NmraDcc) to allow direct control via track signal.
 - [ ] **Runtime Configuration**: Implement CV-like configuration storage in EEPROM/Flash to allow changing settings without recompiling.
 - [ ] **I/O Expansion**: Support for I2C/SPI port expanders (e.g., MCP23017) or shift registers to control more turnouts than available GPIO pins allow.
 - [ ] **Signal & Light Control**: Add dedicated classes for controlling railway signals and lighting effects (fading, blinking) linked to turnout states.
