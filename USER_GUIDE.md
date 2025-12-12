@@ -76,6 +76,15 @@ xDuinoRails_ThreeWayTurnout(int id, const char* name, int coilPin1_A, int coilPi
 
 ## Wiring Diagrams
 
+### DCC Input
+
+*   **Optocoupler:** Connect the DCC signal from the track to the defined DCC pin (default: D0) using an optocoupler circuit (e.g., 6N137). The optocoupler protects the microcontroller from the high track voltage and isolates the signal.
+    *   Track Signal A -> 1k Resistor -> Optocoupler Anode
+    *   Track Signal B -> Optocoupler Cathode
+    *   Optocoupler VCC -> 3.3V/5V
+    *   Optocoupler GND -> GND
+    *   Optocoupler Output (Collector) -> DCC Pin (with pull-up enabled in software)
+
 ### Servo with End-Switches
 
 *   **Servo:** Connect the servo's PWM pin to the pin specified in the constructor (`pin1`), and its power and ground to your board's 5V and GND.
