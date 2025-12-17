@@ -38,6 +38,8 @@ static volatile uint16_t bemf_ring_buffer[BEMF_RING_BUFFER_SIZE];
 static hal_bemf_update_callback_t bemf_callback = nullptr;
 static uint8_t g_pwm_a_pin; // Motor PWM A pin
 static uint8_t g_pwm_b_pin; // Motor PWM B pin
+static uint8_t g_bemf_a_pin; // BEMF ADC A pin
+static uint8_t g_bemf_b_pin; // BEMF ADC B pin
 
 // Forward Declarations
 static void dma_irq_handler();
@@ -87,6 +89,8 @@ static void on_pwm_wrap() {
 void hal_motor_init(uint8_t pwm_a_pin, uint8_t pwm_b_pin, uint8_t bemf_a_pin, uint8_t bemf_b_pin, hal_bemf_update_callback_t callback) {
     g_pwm_a_pin = pwm_a_pin;
     g_pwm_b_pin = pwm_b_pin;
+    g_bemf_a_pin = bemf_a_pin;
+    g_bemf_b_pin = bemf_b_pin;
     bemf_callback = callback;
 
     // --- ADC and DMA Setup ---
@@ -165,6 +169,33 @@ int hal_motor_get_bemf_buffer(volatile uint16_t** buffer, int* last_write_pos) {
     *last_write_pos = byte_offset / sizeof(uint16_t);
 
     return BEMF_RING_BUFFER_SIZE;
+}
+
+int hal_measure_inductance_pulse(bool forward) {
+    // Disable BEMF interrupts to prevent conflicts
+    irq_set_enabled(PWM_IRQ_WRAP, false);
+    irq_set_enabled(DMA_IRQ_0, false);
+
+    // Select ADC channel
+    uint8_t pin_to_measure = forward ? g_bemf_a_pin : g_bemf_b_pin;
+    adc_select_input(pin_to_measure - 26);
+
+    // Send a short pulse
+    hal_motor_set_pwm(255, forward);
+    delayMicroseconds(100);
+    hal_motor_set_pwm(0, false);
+
+    // Delay to sample the flyback voltage from the coil
+    delayMicroseconds(50);
+
+    // Take a single ADC reading
+    int result = adc_read();
+
+    // Re-enable BEMF interrupts
+    irq_set_enabled(PWM_IRQ_WRAP, true);
+    irq_set_enabled(DMA_IRQ_0, true);
+
+    return result;
 }
 
 #endif // ARDUINO_ARCH_RP2040

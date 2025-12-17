@@ -19,9 +19,22 @@ xDuinoRails_Turnout turnout1(
     D3, D4  // Sensor pins
 );
 
-/*
+// Define the BEMF-controlled turnout using the new config struct
+BEMF_Config bemf_config = {
+    .pwm_a_pin = D7,
+    .pwm_b_pin = D8,
+    .bemf_a_pin = A2, // Must be an ADC pin. Using A2 to avoid conflict with turnout2
+    .bemf_b_pin = A3  // Must be an ADC pin. Using A3 to avoid conflict with turnout2
+};
+xDuinoRails_Turnout turnout3(
+    3,
+    "BEMF-Weiche",
+    bemf_config
+);
+
 // Commented out to avoid pin conflicts during DCC testing
 // Define the Märklin three-way turnout
+/*
 xDuinoRails_ThreeWayTurnout turnout2(
     2,
     "Dreiwegweiche",
@@ -30,20 +43,8 @@ xDuinoRails_ThreeWayTurnout turnout2(
     D9, D10,   // Coil pins B
     A1, A0  // Sensor pins B
 );
-
-// Define the BEMF-controlled turnout using the new config struct
-BEMF_Config bemf_config = {
-    .pwm_a_pin = D7,
-    .pwm_b_pin = D8,
-    .bemf_a_pin = A0, // Must be an ADC pin
-    .bemf_b_pin = A1  // Must be an ADC pin
-};
-xDuinoRails_Turnout turnout3(
-    3,
-    "BEMF-Weiche",
-    bemf_config
-);
 */
+
 
 // Callback for DCC Accessory Packet
 void notifyDccAccTurnoutOutput(uint16_t Addr, uint8_t Direction, uint8_t OutputPower) {
@@ -71,6 +72,10 @@ void notifyDccAccTurnoutOutput(uint16_t Addr, uint8_t Direction, uint8_t OutputP
 
             // Let's just map Direction 0 -> Position 0, Direction 1 -> Position 1.
             turnout1.setPosition(Direction ? 1 : 0);
+        } else if (Addr == 3) {
+            Serial.print("Switching Turnout 3 to ");
+            Serial.println(Direction ? "Position 2" : "Position 1");
+            turnout3.setPosition(Direction ? 2 : 1);
         }
     }
 }
@@ -91,7 +96,8 @@ void setup() {
 
     turnout1.begin();
     //turnout2.begin();
-    //turnout3.begin();
+    turnout3.enablePolling(true);
+    turnout3.begin();
 }
 
 void loop() {
@@ -101,5 +107,12 @@ void loop() {
     // Update the state of all turnouts
     turnout1.update();
     //turnout2.update();
-    //turnout3.update();
+    turnout3.update();
+
+    static unsigned long lastPrintTime = 0;
+    if (millis() - lastPrintTime > 1000) {
+        Serial.print("Turnout 3 Position: ");
+        Serial.println(turnout3.getPosition());
+        lastPrintTime = millis();
+    }
 }
