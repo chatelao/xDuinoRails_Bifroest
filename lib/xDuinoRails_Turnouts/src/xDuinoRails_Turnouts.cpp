@@ -9,7 +9,9 @@ volatile bool xDuinoRails_Turnout::_bemf_motor_active = false;
 // Original constructor for Servo and Coil
 xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, MotorType motorType, int pin1, int pin2, int sensorPin1, int sensorPin2, int angleMin, int angleMax)
     : _id(id), _name(name), _motorType(motorType), _sensorPin1(sensorPin1), _sensorPin2(sensorPin2),
-      _state(STATE_IDLE), _targetPosition(0), _bemfEndDetected(false) {
+      _state(STATE_IDLE), _targetPosition(0), _currentPosition(0), _bemfEndDetected(false),
+      _pollingEnabled(false), _calibrated(false), _calibration_step(0), _inductance_pos1(0), _inductance_pos2(0),
+      _calibration_timer(0), _lastPollTime(0) {
     if (_motorType == MOTOR_SERVO) {
         _motor.servo.servo = new Servo();
         _motor.servo.pin = pin1;
@@ -25,8 +27,11 @@ xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, MotorType mot
 // Overloaded constructor for BEMF
 xDuinoRails_Turnout::xDuinoRails_Turnout(int id, const char* name, const BEMF_Config& bemf_config)
     : _id(id), _name(name), _motorType(MOTOR_COIL_BEMF), _sensorPin1(-1), _sensorPin2(-1),
-      _state(STATE_IDLE), _targetPosition(0), _bemfEndDetected(false), _current_stall_count(0),
-      _bemf_threshold(bemf_config.bemf_threshold), _bemf_stall_count(bemf_config.bemf_stall_count) {
+      _state(STATE_IDLE), _targetPosition(0), _currentPosition(0), _bemfEndDetected(false),
+      _current_stall_count(0), _bemf_threshold(bemf_config.bemf_threshold),
+      _bemf_stall_count(bemf_config.bemf_stall_count), _pollingEnabled(false),
+      _calibrated(false), _calibration_step(0), _inductance_pos1(0), _inductance_pos2(0),
+      _calibration_timer(0), _lastPollTime(0) {
     _motor.bemf.pwm_a_pin = bemf_config.pwm_a_pin;
     _motor.bemf.pwm_b_pin = bemf_config.pwm_b_pin;
     _motor.bemf.bemf_a_pin = bemf_config.bemf_a_pin;
@@ -55,6 +60,9 @@ void xDuinoRails_Turnout::begin() {
         pinMode(_sensorPin2, INPUT_PULLUP);
     } else if (_motorType == MOTOR_COIL_BEMF) {
         hal_motor_init(_motor.bemf.pwm_a_pin, _motor.bemf.pwm_b_pin, _motor.bemf.bemf_a_pin, _motor.bemf.bemf_b_pin, on_bemf_update);
+        if (_pollingEnabled) {
+            _state = STATE_CALIBRATING;
+        }
     }
 }
 
@@ -104,6 +112,13 @@ void xDuinoRails_Turnout::update() {
 
     switch (_state) {
         case STATE_IDLE:
+            if (_pollingEnabled) {
+                if (millis() - _lastPollTime > 500) {
+                    _pollPosition();
+                    _lastPollTime = millis();
+                }
+            }
+
             if (_targetPosition == 1 && !sensor1_active) {
                 if (_motorType == MOTOR_COIL_BEMF && _bemf_motor_active) return; // Concurrency lock
 
@@ -118,8 +133,10 @@ void xDuinoRails_Turnout::update() {
                 // Ensure immediate first pulse
                 _lastMoveTime = millis() - (COIL_PULSE_ON_MS + COIL_PULSE_OFF_MS) - 1;
 
+#ifdef DEBUG_XDR_TURNOUTS
                 Serial.print("Bewegung gestartet: ");
                 Serial.println(_name);
+#endif
             } else if (_targetPosition == 2 && !sensor2_active) {
                 if (_motorType == MOTOR_COIL_BEMF && _bemf_motor_active) return; // Concurrency lock
 
@@ -134,20 +151,27 @@ void xDuinoRails_Turnout::update() {
                 // Ensure immediate first pulse
                 _lastMoveTime = millis() - (COIL_PULSE_ON_MS + COIL_PULSE_OFF_MS) - 1;
 
+#ifdef DEBUG_XDR_TURNOUTS
                 Serial.print("Bewegung gestartet: ");
                 Serial.println(_name);
+#endif
             }
             break;
 
         case STATE_MOVING_TO_POS1:
             if ((_motorType != MOTOR_COIL_BEMF && sensor1_active) || (_motorType == MOTOR_COIL_BEMF && _bemfEndDetected)) {
+                _currentPosition = 1;
                 stopMotor();
+#ifdef DEBUG_XDR_TURNOUTS
                 Serial.print("Position 1 erreicht: ");
                 Serial.println(_name);
+#endif
             } else if (millis() - _moveStartTime > TIMEOUT_MS) {
                 stopMotor();
+#ifdef DEBUG_XDR_TURNOUTS
                 Serial.print("Timeout: ");
                 Serial.println(_name);
+#endif
             } else {
                 if (_motorType == MOTOR_SERVO) {
                     if (millis() - _lastMoveTime > SERVO_STEP_DELAY) {
@@ -179,13 +203,18 @@ void xDuinoRails_Turnout::update() {
 
         case STATE_MOVING_TO_POS2:
             if ((_motorType != MOTOR_COIL_BEMF && sensor2_active) || (_motorType == MOTOR_COIL_BEMF && _bemfEndDetected)) {
+                _currentPosition = 2;
                 stopMotor();
+#ifdef DEBUG_XDR_TURNOUTS
                 Serial.print("Position 2 erreicht: ");
                 Serial.println(_name);
+#endif
             } else if (millis() - _moveStartTime > TIMEOUT_MS) {
                 stopMotor();
+#ifdef DEBUG_XDR_TURNOUTS
                 Serial.print("Timeout: ");
                 Serial.println(_name);
+#endif
             } else {
                 if (_motorType == MOTOR_SERVO) {
                     if (millis() - _lastMoveTime > SERVO_STEP_DELAY) {
@@ -214,7 +243,109 @@ void xDuinoRails_Turnout::update() {
                 }
             }
             break;
+
+        case STATE_CALIBRATING:
+            if (_calibrate()) {
+                _calibrated = true;
+                _state = STATE_IDLE;
+#ifdef DEBUG_XDR_TURNOUTS
+                Serial.print("Kalibrierung abgeschlossen: ");
+                Serial.println(_name);
+#endif
+            }
+            break;
     }
+}
+
+void xDuinoRails_Turnout::enablePolling(bool enabled) {
+    if (_motorType == MOTOR_COIL_BEMF) {
+        _pollingEnabled = enabled;
+    }
+}
+
+int xDuinoRails_Turnout::getPosition() const {
+    return _currentPosition;
+}
+
+void xDuinoRails_Turnout::_pollPosition() {
+    if (!_calibrated || !_pollingEnabled || _bemf_motor_active) {
+        return;
+    }
+
+    // Measure inductance of the 'forward' coil
+    int current_inductance = hal_measure_inductance_pulse(true);
+
+    if (current_inductance != -1) {
+        // Compare with calibrated values to determine the position
+        int diff1 = abs(current_inductance - _inductance_pos1);
+        int diff2 = abs(current_inductance - _inductance_pos2);
+
+        if (diff1 < diff2) {
+            if (_currentPosition != 1) {
+                _currentPosition = 1;
+#ifdef DEBUG_XDR_TURNOUTS
+                Serial.print("Manuelle Umstellung erkannt (Position 1): ");
+                Serial.println(_name);
+#endif
+            }
+        } else {
+            if (_currentPosition != 2) {
+                _currentPosition = 2;
+#ifdef DEBUG_XDR_TURNOUTS
+                Serial.print("Manuelle Umstellung erkannt (Position 2): ");
+                Serial.println(_name);
+#endif
+            }
+        }
+    }
+}
+
+bool xDuinoRails_Turnout::_calibrate() {
+    switch (_calibration_step) {
+        case 0:
+#ifdef DEBUG_XDR_TURNOUTS
+            Serial.print("Starte Kalibrierung: ");
+            Serial.println(_name);
+#endif
+            setPosition(1);
+            _calibration_step++;
+            break;
+        case 1:
+            if (_state == STATE_IDLE) {
+                _calibration_timer = millis();
+                _calibration_step++;
+            }
+            break;
+        case 2:
+            if (millis() - _calibration_timer > 200) {
+                _inductance_pos1 = hal_measure_inductance_pulse(true);
+#ifdef DEBUG_XDR_TURNOUTS
+                Serial.print("Induktanz Position 1: ");
+                Serial.println(_inductance_pos1);
+#endif
+                setPosition(2);
+                _calibration_step++;
+            }
+            break;
+        case 3:
+            if (_state == STATE_IDLE) {
+                _calibration_timer = millis();
+                _calibration_step++;
+            }
+            break;
+        case 4:
+            if (millis() - _calibration_timer > 200) {
+                _inductance_pos2 = hal_measure_inductance_pulse(true);
+#ifdef DEBUG_XDR_TURNOUTS
+                Serial.print("Induktanz Position 2: ");
+                Serial.println(_inductance_pos2);
+#endif
+                _calibration_step = 0; // Reset for next time
+                return true;    // Calibration finished
+            }
+            break;
+    }
+    return false; // Calibration in progress
 }
 
 // --- ThreeWayTurnout Implementation ---

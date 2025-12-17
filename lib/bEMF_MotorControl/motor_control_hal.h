@@ -71,4 +71,22 @@ void hal_motor_set_pwm(int duty_cycle, bool forward);
  */
 int hal_motor_get_bemf_buffer(volatile uint16_t** buffer, int* last_write_pos);
 
+/**
+ * @brief Measures coil inductance by sending a short, low-power pulse.
+ *
+ * This function is designed for polling the physical position of a dual-coil
+ * turnout motor when it is idle. It sends a very short, low-power PWM pulse
+ * to one coil and measures the resulting current rise via the ADC. The rate
+ * of current rise is proportional to the coil's inductance, which in turn
+ * depends on the position of the armature.
+ *
+ * This function MUST be called only when the motor is known to be idle.
+ *
+ * @param forward Selects which coil to pulse (true for the 'forward' coil,
+ *                false for the 'reverse' coil).
+ * @return An integer value proportional to the measured inductance. A higher
+ *         value indicates a slower current rise (higher inductance).
+ */
+int hal_measure_inductance_pulse(bool forward);
+
 #endif // MOTOR_CONTROL_HAL_H

@@ -1,6 +1,9 @@
 #ifndef xDuinoRails_Turnouts_h
 #define xDuinoRails_Turnouts_h
 
+// Comment out this line to disable debug prints
+#define DEBUG_XDR_TURNOUTS
+
 #include <Arduino.h>
 #include <Servo.h>
 #include "motor_control_hal.h"
@@ -33,15 +36,20 @@ public:
     void begin();
     void update();
     void setPosition(int position); // 1 for position 1, 2 for position 2
+    int getPosition() const;
+    void enablePolling(bool enabled);
 
 private:
     enum State {
         STATE_IDLE,
         STATE_MOVING_TO_POS1,
-        STATE_MOVING_TO_POS2
+        STATE_MOVING_TO_POS2,
+        STATE_CALIBRATING
     };
 
     void stopMotor();
+    void _pollPosition();
+    bool _calibrate();
     static void on_bemf_update(int raw_bemf);
 
     // General properties
@@ -50,12 +58,18 @@ private:
     MotorType _motorType;
     State _state;
     int _targetPosition; // 0: unset, 1: pos1, 2: pos2
+    int _currentPosition; // Last known physical position
 
     // BEMF-specific properties
     volatile bool _bemfEndDetected;
     volatile int _current_stall_count;
     int _bemf_threshold;
     int _bemf_stall_count;
+    bool _pollingEnabled;
+    bool _calibrated;
+    int _calibration_step;
+    int _inductance_pos1;
+    int _inductance_pos2;
     static volatile xDuinoRails_Turnout* _active_bemf_turnout;
     static volatile bool _bemf_motor_active;
 
@@ -87,6 +101,8 @@ private:
     // Timing
     unsigned long _moveStartTime;
     unsigned long _lastMoveTime;
+    unsigned long _calibration_timer;
+    unsigned long _lastPollTime;
 
     // Constants
     static const unsigned long TIMEOUT_MS = 5000;
